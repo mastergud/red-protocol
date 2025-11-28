@@ -27,16 +27,12 @@ export function Scene() {
   return (
     <div className="absolute inset-0 w-full h-full">
       <Canvas
-        shadows
+        shadows="soft"
         dpr={[1, 2]}
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 0.8,
-          shadowMap: {
-            enabled: true,
-            type: THREE.PCFSoftShadowMap,
-          },
         }}
         style={{ background: "#020617" }}
       >
