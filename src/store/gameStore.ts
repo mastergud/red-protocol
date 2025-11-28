@@ -1,218 +1,191 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// RED PROTOCOL - Game State Store (Zustand)
-// Central state management for the investigation game
+// RED PROTOCOL - Game Store (Zustand)
+// Complete state management for the investigation game
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import {
-  PuzzleState,
-  InventoryItem,
-  ChatMessage,
-} from "@/src/types/game.types";
-import { getDayData, validateSolution } from "@/src/data/gameData";
+import { getDay, validateDaySolution, GameDay } from "@/src/data/gameContent";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface ChatMessage {
+  id: string;
+  role: "user" | "agent";
+  content: string;
+  timestamp: Date;
+  isAudio?: boolean;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  dayFound: number;
+  description?: string;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // State Interface
 // ═══════════════════════════════════════════════════════════════════════════════
 interface GameState {
-  // Progress
+  // Core Progress
   currentDay: number;
   unlockedDays: number[];
-  solvedDays: number[];
-
+  completedDays: number[];
+  
   // Inventory
   inventory: InventoryItem[];
-
-  // Puzzle State
-  currentPuzzleState: PuzzleState;
-  puzzleProgress: Record<number, number>; // day -> progress percentage
-
+  
   // Tools
   isUvLightActive: boolean;
   isFlashlightActive: boolean;
-  selectedTool: string | null;
-
-  // Agent K Chat
-  chatMessages: ChatMessage[];
-  isChatOpen: boolean;
-
-  // UI State
-  isInventoryOpen: boolean;
-  currentHintIndex: Record<number, number>; // day -> hint index shown
-
+  
+  // Walkie-Talkie
+  isWalkieTalkieOpen: boolean;
+  chatHistory: ChatMessage[];
+  isAgentSpeaking: boolean;
+  isProcessing: boolean;
+  
   // Audio
   isMuted: boolean;
   radioFrequency: number;
+  
+  // Puzzle State
+  currentPuzzleProgress: number;
+  scratchProgress: number;
+  
+  // UI
+  showDayComplete: boolean;
+  showInventory: boolean;
 
   // Actions - Progress
   setCurrentDay: (day: number) => void;
-  unlockNextDay: () => void;
+  completeDay: (day: number) => void;
   unlockDay: (day: number) => void;
-  solvePuzzle: (day: number) => void;
-
+  
   // Actions - Inventory
   addToInventory: (item: InventoryItem) => void;
-  removeFromInventory: (itemId: string) => void;
   hasItem: (itemId: string) => boolean;
-
+  
   // Actions - Tools
-  toggleUvLight: () => void;
+  toggleUv: () => void;
   toggleFlashlight: () => void;
-  selectTool: (tool: string | null) => void;
-
-  // Actions - Puzzle
-  setPuzzleState: (state: PuzzleState) => void;
-  updatePuzzleProgress: (day: number, progress: number) => void;
-  validateAnswer: (day: number, answer: string) => boolean;
-
-  // Actions - Chat
+  
+  // Actions - Walkie-Talkie
+  toggleWalkie: () => void;
   addChatMessage: (message: Omit<ChatMessage, "id" | "timestamp">) => void;
-  toggleChat: () => void;
   clearChat: () => void;
-
-  // Actions - UI
-  toggleInventory: () => void;
-  getNextHint: (day: number) => string | null;
-
+  setAgentSpeaking: (speaking: boolean) => void;
+  setProcessing: (processing: boolean) => void;
+  
   // Actions - Audio
   toggleMute: () => void;
   setRadioFrequency: (freq: number) => void;
-
+  
+  // Actions - Puzzle
+  updateScratchProgress: (progress: number) => void;
+  validateAnswer: (day: number, answer: string) => boolean;
+  
+  // Actions - UI
+  setShowDayComplete: (show: boolean) => void;
+  toggleInventoryUI: () => void;
+  
   // Actions - Game
   resetGame: () => void;
-  loadProgress: (progress: Partial<GameState>) => void;
+  getCurrentDayData: () => GameDay | undefined;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Initial State
-// ═══════════════════════════════════════════════════════════════════════════════
-const initialState = {
-  currentDay: 1,
-  unlockedDays: [1],
-  solvedDays: [],
-  inventory: [],
-  currentPuzzleState: "ACTIVE" as PuzzleState,
-  puzzleProgress: {},
-  isUvLightActive: false,
-  isFlashlightActive: false,
-  selectedTool: null,
-  chatMessages: [],
-  isChatOpen: false,
-  isInventoryOpen: false,
-  currentHintIndex: {},
-  isMuted: false,
-  radioFrequency: 88.0,
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Store Creation
+// Store
 // ═══════════════════════════════════════════════════════════════════════════════
 export const useGameStore = create<GameState>()(
   devtools(
     persist(
       (set, get) => ({
-        ...initialState,
+        // Initial State
+        currentDay: 1,
+        unlockedDays: [1],
+        completedDays: [],
+        inventory: [],
+        isUvLightActive: false,
+        isFlashlightActive: false,
+        isWalkieTalkieOpen: false,
+        chatHistory: [],
+        isAgentSpeaking: false,
+        isProcessing: false,
+        isMuted: false,
+        radioFrequency: 88.0,
+        currentPuzzleProgress: 0,
+        scratchProgress: 0,
+        showDayComplete: false,
+        showInventory: false,
 
         // ─────────────────────────────────────────────────────────────────────
         // Progress Actions
         // ─────────────────────────────────────────────────────────────────────
-        setCurrentDay: (day) =>
-          set(
-            (state) => ({
-              currentDay: day,
-              currentPuzzleState: state.solvedDays.includes(day)
-                ? "SOLVED"
-                : "ACTIVE",
-            }),
-            false,
-            "setCurrentDay"
-          ),
+        setCurrentDay: (day) => {
+          if (get().unlockedDays.includes(day)) {
+            set({ currentDay: day, scratchProgress: 0 }, false, "setCurrentDay");
+          }
+        },
 
-        unlockNextDay: () =>
+        completeDay: (day) => {
+          const state = get();
+          if (state.completedDays.includes(day)) return;
+
+          const dayData = getDay(day);
+          const newInventory = [...state.inventory];
+
+          // Add reward to inventory
+          if (dayData?.reward) {
+            newInventory.push({
+              id: `reward_day_${day}`,
+              name: dayData.reward,
+              dayFound: day,
+              description: `Evidence from Day ${day}: ${dayData.title}`,
+            });
+          }
+
+          // Unlock next day
+          const nextDay = day + 1;
+          const newUnlocked = state.unlockedDays.includes(nextDay)
+            ? state.unlockedDays
+            : [...state.unlockedDays, nextDay].sort((a, b) => a - b);
+
           set(
-            (state) => {
-              const nextDay = state.currentDay + 1;
-              if (nextDay <= 24 && !state.unlockedDays.includes(nextDay)) {
-                return {
-                  unlockedDays: [...state.unlockedDays, nextDay],
-                };
-              }
-              return state;
+            {
+              completedDays: [...state.completedDays, day],
+              unlockedDays: newUnlocked,
+              inventory: newInventory,
+              showDayComplete: true,
+              scratchProgress: 0,
             },
             false,
-            "unlockNextDay"
-          ),
+            "completeDay"
+          );
+        },
 
-        unlockDay: (day) =>
-          set(
-            (state) => {
-              if (!state.unlockedDays.includes(day)) {
-                return {
-                  unlockedDays: [...state.unlockedDays, day].sort((a, b) => a - b),
-                };
-              }
-              return state;
-            },
-            false,
-            "unlockDay"
-          ),
-
-        solvePuzzle: (day) =>
-          set(
-            (state) => {
-              if (!state.solvedDays.includes(day)) {
-                const dayData = getDayData(day);
-                const newInventory = [...state.inventory];
-
-                // Add reward to inventory if exists
-                if (dayData?.reward) {
-                  newInventory.push({
-                    id: `reward_day_${day}`,
-                    name: dayData.reward,
-                    description: `Evidence from Day ${day}: ${dayData.title}`,
-                    icon: "📦",
-                    dayFound: day,
-                    isKeyItem: true,
-                  });
-                }
-
-                return {
-                  solvedDays: [...state.solvedDays, day],
-                  currentPuzzleState: "SOLVED",
-                  inventory: newInventory,
-                  puzzleProgress: { ...state.puzzleProgress, [day]: 100 },
-                };
-              }
-              return state;
-            },
-            false,
-            "solvePuzzle"
-          ),
+        unlockDay: (day) => {
+          const state = get();
+          if (!state.unlockedDays.includes(day)) {
+            set(
+              { unlockedDays: [...state.unlockedDays, day].sort((a, b) => a - b) },
+              false,
+              "unlockDay"
+            );
+          }
+        },
 
         // ─────────────────────────────────────────────────────────────────────
         // Inventory Actions
         // ─────────────────────────────────────────────────────────────────────
-        addToInventory: (item) =>
-          set(
-            (state) => {
-              if (!state.inventory.find((i) => i.id === item.id)) {
-                return { inventory: [...state.inventory, item] };
-              }
-              return state;
-            },
-            false,
-            "addToInventory"
-          ),
-
-        removeFromInventory: (itemId) =>
-          set(
-            (state) => ({
-              inventory: state.inventory.filter((i) => i.id !== itemId),
-            }),
-            false,
-            "removeFromInventory"
-          ),
+        addToInventory: (item) => {
+          const state = get();
+          if (!state.inventory.find((i) => i.id === item.id)) {
+            set({ inventory: [...state.inventory, item] }, false, "addToInventory");
+          }
+        },
 
         hasItem: (itemId) => {
           return get().inventory.some((i) => i.id === itemId);
@@ -221,61 +194,40 @@ export const useGameStore = create<GameState>()(
         // ─────────────────────────────────────────────────────────────────────
         // Tool Actions
         // ─────────────────────────────────────────────────────────────────────
-        toggleUvLight: () =>
+        toggleUv: () => {
           set(
             (state) => ({
               isUvLightActive: !state.isUvLightActive,
-              selectedTool: !state.isUvLightActive ? "uv_light" : null,
+              isFlashlightActive: false, // Only one light at a time
             }),
             false,
-            "toggleUvLight"
-          ),
+            "toggleUv"
+          );
+        },
 
-        toggleFlashlight: () =>
+        toggleFlashlight: () => {
           set(
             (state) => ({
               isFlashlightActive: !state.isFlashlightActive,
-              selectedTool: !state.isFlashlightActive ? "flashlight" : null,
+              isUvLightActive: false,
             }),
             false,
             "toggleFlashlight"
-          ),
-
-        selectTool: (tool) =>
-          set({ selectedTool: tool }, false, "selectTool"),
-
-        // ─────────────────────────────────────────────────────────────────────
-        // Puzzle Actions
-        // ─────────────────────────────────────────────────────────────────────
-        setPuzzleState: (state) =>
-          set({ currentPuzzleState: state }, false, "setPuzzleState"),
-
-        updatePuzzleProgress: (day, progress) =>
-          set(
-            (state) => ({
-              puzzleProgress: { ...state.puzzleProgress, [day]: progress },
-            }),
-            false,
-            "updatePuzzleProgress"
-          ),
-
-        validateAnswer: (day, answer) => {
-          const isCorrect = validateSolution(day, answer);
-          if (isCorrect) {
-            get().solvePuzzle(day);
-            get().unlockNextDay();
-          }
-          return isCorrect;
+          );
         },
 
         // ─────────────────────────────────────────────────────────────────────
-        // Chat Actions
+        // Walkie-Talkie Actions
         // ─────────────────────────────────────────────────────────────────────
-        addChatMessage: (message) =>
+        toggleWalkie: () => {
+          set((state) => ({ isWalkieTalkieOpen: !state.isWalkieTalkieOpen }), false, "toggleWalkie");
+        },
+
+        addChatMessage: (message) => {
           set(
             (state) => ({
-              chatMessages: [
-                ...state.chatMessages,
+              chatHistory: [
+                ...state.chatHistory,
                 {
                   ...message,
                   id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -285,102 +237,113 @@ export const useGameStore = create<GameState>()(
             }),
             false,
             "addChatMessage"
-          ),
-
-        toggleChat: () =>
-          set((state) => ({ isChatOpen: !state.isChatOpen }), false, "toggleChat"),
-
-        clearChat: () =>
-          set({ chatMessages: [] }, false, "clearChat"),
-
-        // ─────────────────────────────────────────────────────────────────────
-        // UI Actions
-        // ─────────────────────────────────────────────────────────────────────
-        toggleInventory: () =>
-          set(
-            (state) => ({ isInventoryOpen: !state.isInventoryOpen }),
-            false,
-            "toggleInventory"
-          ),
-
-        getNextHint: (day) => {
-          const state = get();
-          const dayData = getDayData(day);
-          if (!dayData) return null;
-
-          const currentIndex = state.currentHintIndex[day] || 0;
-          if (currentIndex >= dayData.hints.length) {
-            return dayData.hints[dayData.hints.length - 1]; // Return last hint
-          }
-
-          // Update hint index
-          set(
-            (s) => ({
-              currentHintIndex: {
-                ...s.currentHintIndex,
-                [day]: currentIndex + 1,
-              },
-            }),
-            false,
-            "getNextHint"
           );
+        },
 
-          return dayData.hints[currentIndex];
+        clearChat: () => {
+          set({ chatHistory: [] }, false, "clearChat");
+        },
+
+        setAgentSpeaking: (speaking) => {
+          set({ isAgentSpeaking: speaking }, false, "setAgentSpeaking");
+        },
+
+        setProcessing: (processing) => {
+          set({ isProcessing: processing }, false, "setProcessing");
         },
 
         // ─────────────────────────────────────────────────────────────────────
         // Audio Actions
         // ─────────────────────────────────────────────────────────────────────
-        toggleMute: () =>
-          set((state) => ({ isMuted: !state.isMuted }), false, "toggleMute"),
+        toggleMute: () => {
+          set((state) => ({ isMuted: !state.isMuted }), false, "toggleMute");
+        },
 
-        setRadioFrequency: (freq) =>
-          set({ radioFrequency: freq }, false, "setRadioFrequency"),
+        setRadioFrequency: (freq) => {
+          set({ radioFrequency: freq }, false, "setRadioFrequency");
+        },
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Puzzle Actions
+        // ─────────────────────────────────────────────────────────────────────
+        updateScratchProgress: (progress) => {
+          set({ scratchProgress: progress }, false, "updateScratchProgress");
+        },
+
+        validateAnswer: (day, answer) => {
+          const isCorrect = validateDaySolution(day, answer);
+          if (isCorrect) {
+            get().completeDay(day);
+          }
+          return isCorrect;
+        },
+
+        // ─────────────────────────────────────────────────────────────────────
+        // UI Actions
+        // ─────────────────────────────────────────────────────────────────────
+        setShowDayComplete: (show) => {
+          set({ showDayComplete: show }, false, "setShowDayComplete");
+        },
+
+        toggleInventoryUI: () => {
+          set((state) => ({ showInventory: !state.showInventory }), false, "toggleInventory");
+        },
 
         // ─────────────────────────────────────────────────────────────────────
         // Game Actions
         // ─────────────────────────────────────────────────────────────────────
-        resetGame: () =>
-          set(initialState, false, "resetGame"),
+        resetGame: () => {
+          set(
+            {
+              currentDay: 1,
+              unlockedDays: [1],
+              completedDays: [],
+              inventory: [],
+              isUvLightActive: false,
+              isFlashlightActive: false,
+              chatHistory: [],
+              radioFrequency: 88.0,
+              scratchProgress: 0,
+              showDayComplete: false,
+            },
+            false,
+            "resetGame"
+          );
+        },
 
-        loadProgress: (progress) =>
-          set((state) => ({ ...state, ...progress }), false, "loadProgress"),
+        getCurrentDayData: () => {
+          return getDay(get().currentDay);
+        },
       }),
       {
-        name: "red-protocol-game-storage",
+        name: "red-protocol-save",
         partialize: (state) => ({
           currentDay: state.currentDay,
           unlockedDays: state.unlockedDays,
-          solvedDays: state.solvedDays,
+          completedDays: state.completedDays,
           inventory: state.inventory,
-          puzzleProgress: state.puzzleProgress,
-          currentHintIndex: state.currentHintIndex,
           isMuted: state.isMuted,
         }),
       }
     ),
-    { name: "RedProtocolGameStore" }
+    { name: "RedProtocolStore" }
   )
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Selectors (for optimized re-renders)
+// Selectors
 // ═══════════════════════════════════════════════════════════════════════════════
-export const selectCurrentDayData = (state: GameState) =>
-  getDayData(state.currentDay);
+export const selectProgress = (state: GameState) => ({
+  completed: state.completedDays.length,
+  total: 24,
+  percentage: Math.round((state.completedDays.length / 24) * 100),
+});
 
-export const selectIsDaySolved = (day: number) => (state: GameState) =>
-  state.solvedDays.includes(day);
+export const selectIsDayCompleted = (day: number) => (state: GameState) =>
+  state.completedDays.includes(day);
 
 export const selectIsDayUnlocked = (day: number) => (state: GameState) =>
   state.unlockedDays.includes(day);
 
-export const selectProgress = (state: GameState) => ({
-  solved: state.solvedDays.length,
-  total: 24,
-  percentage: Math.round((state.solvedDays.length / 24) * 100),
-});
-
-export const selectKeyItems = (state: GameState) =>
-  state.inventory.filter((item) => item.isKeyItem);
-
+export const selectCurrentDayData = (state: GameState) =>
+  getDay(state.currentDay);
