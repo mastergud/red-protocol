@@ -1,26 +1,123 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Noir Christmas Color Palette */
+  --noir-black: #0a0a0f;
+  --noir-charcoal: #1a1a24;
+  --noir-slate: #2a2a3a;
+  --evidence-red: #dc2626;
+  --evidence-red-glow: #ef4444;
+  --cold-blue: #3b82f6;
+  --terminal-green: #22c55e;
+  --warning-amber: #f59e0b;
+  --paper-white: #f8fafc;
+  
+  /* Fonts */
+  --font-mono: var(--font-geist-mono), "Courier New", monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Remove default scrollbar for immersion */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+::-webkit-scrollbar-track {
+  background: var(--noir-black);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--noir-slate);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--evidence-red);
+}
+
+/* Selection styling */
+::selection {
+  background-color: var(--evidence-red);
+  color: var(--paper-white);
+}
+
+/* Base styles */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--noir-black);
+  color: var(--paper-white);
+  font-family: var(--font-mono);
+}
+
+/* Utility animations */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+  75% { opacity: 0.9; }
+}
+
+@keyframes pulse-red {
+  0%, 100% { 
+    box-shadow: 0 0 5px var(--evidence-red), 0 0 10px var(--evidence-red);
+  }
+  50% { 
+    box-shadow: 0 0 20px var(--evidence-red), 0 0 30px var(--evidence-red-glow);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
 }
+
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Utility classes */
+.animate-flicker {
+  animation: flicker 0.15s infinite;
+}
+
+.animate-pulse-red {
+  animation: pulse-red 2s ease-in-out infinite;
+}
+
+.text-evidence {
+  color: var(--evidence-red);
+  text-shadow: 0 0 10px var(--evidence-red);
+}
+
+.text-terminal {
+  color: var(--terminal-green);
+  text-shadow: 0 0 5px var(--terminal-green);
+}
+
+/* Noir glass effect */
+.glass-noir {
+  background: rgba(10, 10, 15, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+/* Evidence tag styling */
+.evidence-tag {
+  background: linear-gradient(135deg, var(--evidence-red) 0%, #991b1b 100%);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  clip-path: polygon(0 0, 100% 0, 95% 100%, 5% 100%);
+}
+
+/* Canvas container */
+.canvas-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
